@@ -1,4 +1,7 @@
 import pandas as pd
+import matplotlib.pyplot as plt
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
+plt.rcParams['axes.unicode_minus'] = False
 def load_and_clean_data(filename):
     df = pd.read_csv(filename)
     df['score']=pd.to_numeric(df['score'], errors='coerce')
@@ -50,6 +53,8 @@ def analyse_classes(final_df):
         '平均分':class_mean,
         '及格率':class_passed_rate.round(2)
     })
+    class_order=['一班','二班','三班']
+    class_summary=class_summary.reindex(class_order)
     best_class=class_mean.idxmax()
     best_score=class_mean.max().round(2)
     return class_summary,best_class,best_score
@@ -124,6 +129,45 @@ def print_gender_summary(final_df):
     print('男女平均成绩为:',gender_mean.round(2))
     print('男女各自人数为:',gender_count)
     print('男女中位数为:',gender_median)
+def plot_class_average(final_df):
+    class_order=['一班','二班','三班']
+    class_mean=final_df.groupby('class')['score'].mean().reindex(class_order)
+    class_mean.plot(kind='bar', rot=0)
+    plt.title('各班平均成绩')
+    plt.xlabel('班级')
+    plt.ylabel('平均成绩')
+    plt.savefig(
+        'figures/class_average.png',
+        dpi=300,
+        bbox_inches='tight'
+    )
+    plt.show()
+def plot_score_distribution(final_df):
+    plt.hist(final_df['score'], bins=5, edgecolor='black')
+    plt.title('学生成绩分布')
+    plt.xlabel('成绩')
+    plt.ylabel('人数')
+    mean_score=final_df['score'].mean()
+    median_score=final_df['score'].median()
+    plt.axvline(mean_score, linestyle='--', label='平均分')
+    plt.axvline(median_score, linestyle=':', label='中位数')
+    plt.legend()
+    plt.savefig(
+        'figures/score_distribution.png',
+        dpi=300,
+        bbox_inches='tight'
+    )
+    plt.show()
+def plot_score_boxplot(final_df):
+    plt.boxplot(final_df['score'], showmeans=True)
+    plt.title('学生成绩箱线图')
+    plt.ylabel('成绩')
+    plt.savefig(
+        'figures/score_boxplot.png',
+        dpi=300,
+        bbox_inches='tight'
+    )
+    plt.show()
 def save_results(final_df,class_summary):
     final_df.to_csv(
         'students_clean.csv',index=False,encoding='utf-8-sig'
@@ -142,6 +186,9 @@ def main():
     print_level_summary(final_df)
     class_summary=print_class_summary(final_df)   
     print_gender_summary(final_df)
+    plot_class_average(final_df)
+    plot_score_distribution(final_df)
+    plot_score_boxplot(final_df)
     save_results(final_df,class_summary)
 if __name__=="__main__":
     main()
