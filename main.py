@@ -1,4 +1,5 @@
 import pandas as pd
+pd.set_option('display.unicode.east_asian_width', True)
 import matplotlib.pyplot as plt
 plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
 plt.rcParams['axes.unicode_minus'] = False
@@ -19,7 +20,7 @@ def prepare_final_data(df):
     df['level']=df['score'].apply(get_level)
     df['passed']=df['score']>=60
     final_df=(
-        df[['name','score','level','gender','class','passed']]
+        df[['name','score','level','gender','class','study_hours','passed']]
         .dropna(subset=['name','score'])
         .drop_duplicates()
         .reset_index(drop=True)
@@ -59,10 +60,18 @@ def analyse_classes(final_df):
     best_score=class_mean.max().round(2)
     return class_summary,best_class,best_score
 def analyse_gender(final_df):
-    gender_mean=final_df.groupby('gender')['score'].mean()
-    gender_count=final_df.groupby('gender')['name'].count()
-    gender_median=final_df.groupby('gender')['score'].median()
-    return gender_mean,gender_count,gender_median
+    gender_summary=(
+        final_df.groupby('gender')['score']
+        .agg(['count','mean','median','std'])
+        .round(2)
+        .rename(columns={
+            'count':'人数',
+            'mean':'平均数',
+            'median':'中位数',
+            'std':'标准差'
+        })
+        )
+    return gender_summary
 def analyse_levels(final_df):
     level_counts=final_df['level'].value_counts()
     level_rate=(final_df['level'].value_counts(normalize=True)*100).round(2)
@@ -70,6 +79,18 @@ def analyse_levels(final_df):
     passed_count=final_df['passed'].sum()
     passed_rate=final_df['passed'].mean()*100
     return level_counts,level_rate,group_mean,passed_count,passed_rate
+def analysis_correlation(final_df):
+    correlation=final_df['study_hours'].corr(final_df['score'])
+    return round(correlation,2)
+# 教学实验：观察少量反常点对相关系数的影响
+def test_correlation_sensitivity(final_df):
+    test_df=final_df.copy()
+    highest_idx=test_df.idxmax()
+    lowest_idx=test_df.idxmin()
+    test_df.loc[highest_idx,'study_hours']=2.0
+    test_df.loc[lowest_idx,'study_hours']=7.0
+    new_correlation = test_df['study_hours'].corr(test_df['score'])
+    print('破坏数据后的相关系数:', round(new_correlation, 2))
 def print_outlier_summary(df):
     valid_score=df['score'].dropna()
     outliers=find_outliers_iqr(valid_score)
@@ -125,10 +146,18 @@ def print_class_summary(final_df):
     print('此班平均分为：', best_score)
     return class_summary
 def print_gender_summary(final_df):
-    gender_mean,gender_count,gender_median=analyse_gender(final_df)
-    print('男女平均成绩为:',gender_mean.round(2))
-    print('男女各自人数为:',gender_count)
-    print('男女中位数为:',gender_median)
+    gender_summary=analyse_gender(final_df)
+    display_df=(
+        gender_summary
+        .rename_axis('性别')
+        .reset_index()
+    )
+    print('男女成绩汇总:')
+    print(display_df.to_string(index=False))
+def print_correlation_summary(final_df):
+    correlation=analysis_correlation(final_df)
+    print('相关性分析:')
+    print('学习时长与成绩的相关系数为:',correlation)
 def plot_class_average(final_df):
     class_order=['一班','二班','三班']
     class_mean=final_df.groupby('class')['score'].mean().reindex(class_order)
@@ -168,6 +197,33 @@ def plot_score_boxplot(final_df):
         bbox_inches='tight'
     )
     plt.show()
+def plot_score_by_gender(final_df):
+    male_scores=final_df[final_df['gender']=='男']['score']
+    female_scores=final_df[final_df['gender']=='女']['score']
+    plt.boxplot(
+        [male_scores, female_scores],
+        tick_labels=['男','女'],
+        showmeans=True
+        )
+    plt.title('男女成绩分布箱线图')
+    plt.xlabel('性别')
+    plt.ylabel('成绩')
+    plt.show() 
+def plot_study_hours_vs_score(final_df):
+    plt.scatter(
+        final_df['study_hours'],
+        final_df['score']
+    )
+    correlation=final_df['study_hours'].corr(final_df['score'])
+    plt.title(f'学习时长与成绩关系(r={correlation:.2f})')
+    plt.xlabel('学习时长')
+    plt.ylabel('成绩')
+    plt.savefig(
+        'figures/study_hours_vs_score.png',
+        dpi=300,
+        bbox_inches='tight'
+    )
+    plt.show()   
 def save_results(final_df,class_summary):
     final_df.to_csv(
         'students_clean.csv',index=False,encoding='utf-8-sig'
@@ -182,13 +238,17 @@ def main():
     final_df=prepare_final_data(df)
     print_basic_summary(df,final_df)
     print_ranking(final_df)
+    #test_correlation_sensitivity(final_df)
     print_score_statistics(final_df)
     print_level_summary(final_df)
     class_summary=print_class_summary(final_df)   
     print_gender_summary(final_df)
+    print_correlation_summary(final_df)
     plot_class_average(final_df)
     plot_score_distribution(final_df)
     plot_score_boxplot(final_df)
+    plot_score_by_gender(final_df)
+    plot_study_hours_vs_score(final_df)
     save_results(final_df,class_summary)
 if __name__=="__main__":
     main()
