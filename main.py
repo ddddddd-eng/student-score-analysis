@@ -1,3 +1,10 @@
+import numpy as np
+import joblib
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import mean_squared_error,mean_absolute_error,r2_score
+from sklearn.model_selection import train_test_split,cross_val_score,KFold
 import pandas as pd
 pd.set_option('display.unicode.east_asian_width', True)
 import matplotlib.pyplot as plt
@@ -5,6 +12,20 @@ plt.rcParams['font.sans-serif'] = ['Microsoft YaHei']
 plt.rcParams['axes.unicode_minus'] = False
 def load_and_clean_data(filename):
     df = pd.read_csv(filename)
+    sleep_hours = [
+        7.0, 7.5, 8.0, 6.5, 6.0,
+        7.5, 7.0, 8.0, 6.5, 7.5,
+        7.0, 8.0, 7.0, 7.5, 6.5,
+        7.5, 6.0, 7.0, 7.0, 7.5, 7.0
+    ]
+    attendance = [
+        90, 95, 98, 85, 70,
+        96, 88, 99, 75, 92,
+        84, 97, 89, 98, 80,
+        94, 76, 91, 86, 93, 90
+    ]
+    df['sleep_hours'] = sleep_hours
+    df['attendance'] = attendance
     df['score']=pd.to_numeric(df['score'], errors='coerce')
     df.loc[(df['score'] < 0) | (df['score'] > 100), 'score'] = pd.NA
     df['name'] = df['name'].str.strip()
@@ -20,7 +41,7 @@ def prepare_final_data(df):
     df['level']=df['score'].apply(get_level)
     df['passed']=df['score']>=60
     final_df=(
-        df[['name','score','level','gender','class','study_hours','passed']]
+        df[['name','score','level','gender','class','study_hours','sleep_hours','attendance','passed']]
         .dropna(subset=['name','score'])
         .drop_duplicates()
         .reset_index(drop=True)
@@ -82,6 +103,172 @@ def analyse_levels(final_df):
 def analysis_correlation(final_df):
     correlation=final_df['study_hours'].corr(final_df['score'])
     return round(correlation,2)
+def evaluate_model(model,X_test,y_test):
+    y_test_pred=model.predict(X_test)
+    test_results=X_test.copy()
+    test_results['真实成绩']=y_test
+    test_results['预测成绩']=y_test_pred.round(2)
+    test_results['误差']=(
+        test_results['真实成绩']-test_results['预测成绩']
+    ).round(2)
+    mse=mean_squared_error(y_test,y_test_pred)
+    rmse=np.sqrt(mse)
+    mae=mean_absolute_error(y_test,y_test_pred)
+    r2=r2_score(y_test,y_test_pred)
+    print('测试集MSE:', round(mse, 2))
+    print('测试集RMSE:', round(rmse, 2))
+    print('测试集MAE:', round(mae, 2))
+    print('测试集R2:', round(r2, 2))# R²不是准确率，它衡量模型相比直接预测平均值，对目标变量波动的解释程度
+    print(test_results)
+def train_linear_regression(final_df):
+    X=final_df[['study_hours','sleep_hours','attendance']]
+    y=final_df['score']
+    X_train,X_test,y_train,y_test=train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42
+    )
+    model=LinearRegression()
+    model.fit(X_train,y_train)
+    # X_line=final_df[['study_hours']].sort_values('study_hours')
+    # y_line=model.predict(X_line)
+    # plt.scatter(
+    #     final_df['study_hours'],
+    #     final_df['score'],
+    #     label='真实数据'
+    # )
+    # plt.plot(
+    #     X_line['study_hours'],
+    #     y_line,
+    #     label='预测数据'
+    # )
+    # plt.title('学习时长与成绩的线性回归')
+    # plt.xlabel('学习时长')
+    # plt.ylabel('成绩')
+    # plt.legend()
+    # plt.show()
+    student_a=pd.DataFrame({
+       'study_hours':[4.5],
+       'sleep_hours':[7.0],
+       'attendance':[91]     
+    })
+    student_b=pd.DataFrame({
+       'study_hours':[5.5],
+       'sleep_hours':[7.0],
+       'attendance':[91]     
+    })    
+    score_a=model.predict(student_a)[0]
+    score_b=model.predict(student_b)[0]
+    coefficients=pd.Series(
+        model.coef_,
+        index=X.columns
+    ).round(2)
+    print('模型系数:')
+    print(coefficients)
+    print('截距',round(model.intercept_,2))
+    print('学生a预测分数为:',round(score_a,2))
+    print('学生b预测分数为:',round(score_b,2))
+    print('两者相差:',round(score_b-score_a,2))
+    print('训练集人数:', len(X_train))
+    print('测试集人数:', len(X_test))
+    evaluate_model(model,X_test,y_test)
+def test_standerdization(final_df):
+    X=final_df[[
+        'study_hours','sleep_hours','attendance'
+    ]]
+    scaler=StandardScaler()
+    X_scaled=scaler.fit_transform(X)
+    model=LinearRegression()
+    model.fit(X_scaled,final_df['score'])
+    scaled_coefficients=pd.Series(
+        model.coef_,
+        index=X.columns
+    ).round(2)
+    print('标准化后的模型系数:')
+    print(scaled_coefficients)
+def cross_validate_model(final_df):
+    X=final_df[[
+        'study_hours','sleep_hours','attendance'
+        ]]
+    y=final_df['score']
+    model=LinearRegression()
+    kfold=KFold(
+        n_splits=5,
+        shuffle=True,
+        random_state=42
+    )
+    mse_scores=cross_val_score(
+        model,
+        X,
+        y,
+        cv=kfold,
+        scoring='neg_mean_squared_error'
+    )
+    rmse_scores=np.sqrt(-mse_scores)
+    print('5折交叉验证RMSE:',rmse_scores.round(2))
+    print('平均RMSE:',round(rmse_scores.mean(),2))
+def train_with_pipeline(final_df):
+    X=final_df[[
+            'study_hours','sleep_hours','attendance'
+        ]]
+    y=final_df['score']
+    X_train,X_test,y_train,y_test=train_test_split(
+        X,
+        y,
+        test_size=0.2,
+        random_state=42
+    )
+    pipeline=Pipeline([
+        ('scaler',StandardScaler()),
+        ('model',LinearRegression())
+    ])
+    pipeline.fit(X_train,y_train)
+    joblib.dump(
+        pipeline,
+        'student_score_pipeline.pkl'
+    )
+    evaluate_model(pipeline,X_test,y_test)
+    new_student=pd.DataFrame({
+       'study_hours':[4.5],
+       'sleep_hours':[7.0],
+       'attendance':[90]     
+    })
+    predicted_score=pipeline.predict(new_student)
+    print('新学生预测分数为:',round(predicted_score[0],2))
+def cross_validate_pipeline(final_df):
+    X=final_df[[
+        'study_hours','sleep_hours','attendance'
+    ]]
+    y=final_df['score']
+    pipeline=Pipeline([
+        ('scaler',StandardScaler()),
+        ('model',LinearRegression())
+    ])
+    kfold=KFold(
+        n_splits=5,
+        shuffle=True,
+        random_state=42
+    )
+    mse_scores=cross_val_score(
+        pipeline,
+        X,
+        y,
+        cv=kfold,
+        scoring='neg_mean_squared_error'
+    )
+    rmse_scores=np.sqrt(-mse_scores)
+    print('Pipeline五折RMSE:',rmse_scores.round(2))
+    print('Pipeline平均RMSE',round(rmse_scores.mean(),2))
+def run_machine_learning(final_df):
+    train_with_pipeline(final_df)
+    cross_validate_pipeline(final_df)
+def run_visualizations(final_df):
+    plot_class_average(final_df)
+    plot_score_distribution(final_df)
+    plot_score_boxplot(final_df)
+    plot_score_by_gender(final_df)
+    plot_study_hours_vs_score(final_df)
 # 教学实验：观察少量反常点对相关系数的影响
 def test_correlation_sensitivity(final_df):
     test_df=final_df.copy()
@@ -233,23 +420,31 @@ def save_results(final_df,class_summary):
         )
     print('分析结果已保存')
 def main():
+    # 1. 读取与清洗数据
     df = load_and_clean_data('students.csv')
+    final_df = prepare_final_data(df)
+
+    # 2. 数据质量与基础分析
     print_outlier_summary(df)
-    final_df=prepare_final_data(df)
-    print_basic_summary(df,final_df)
+    print_basic_summary(df, final_df)
     print_ranking(final_df)
-    #test_correlation_sensitivity(final_df)
     print_score_statistics(final_df)
     print_level_summary(final_df)
-    class_summary=print_class_summary(final_df)   
+
+    # 3. 分组与相关性分析
+    class_summary = print_class_summary(final_df)
     print_gender_summary(final_df)
     print_correlation_summary(final_df)
-    plot_class_average(final_df)
-    plot_score_distribution(final_df)
-    plot_score_boxplot(final_df)
-    plot_score_by_gender(final_df)
-    plot_study_hours_vs_score(final_df)
-    save_results(final_df,class_summary)
-if __name__=="__main__":
-    main()
 
+    # 4. 机器学习
+    run_machine_learning(final_df)
+
+    # 5. 数据可视化
+    run_visualizations(final_df)
+
+    # 6. 保存结果
+    save_results(final_df, class_summary)
+
+
+if __name__ == "__main__":
+    main()

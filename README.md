@@ -16,27 +16,36 @@
 - `students_clean.csv`：清洗后的学生数据。
 - `class_summary.csv`：各班人数、平均分和及格率的汇总结果。
 ## 如何运行
-1. 安装 Python 3.10 或以上版本。
 
-2. 安装 pandas：
+安装 Python 3.10 或以上版本，并在项目根目录打开终端。
+
+### 1. 安装依赖
 
 ```bash
-pip install pandas
+python -m pip install -r requirements.txt
 ```
 
-3. 进入项目文件夹：
+### 2. 运行分析并训练模型
 
-```powershell
-cd student_score_analysis
-```
-
-4. 运行程序：
-
-```powershell
+```bash
 python main.py
 ```
 
-程序运行后，会在项目文件夹中生成：
+程序会清洗数据、输出分析结果、生成图表，并训练和保存模型到 `student_score_pipeline.pkl`。
 
-- `students_clean.csv`
-- `class_summary.csv`
+### 3. 使用模型预测
+
+```bash
+python predict.py
+```
+
+按照提示输入学习时长、睡眠时长和出勤率，即可获得预测成绩。学习和睡眠时长的单位为小时；出勤率输入 0–100 的数字，例如 90 表示 90%。
+
+预测程序会加载已保存的模型，不会重新训练，因此首次使用前需要先运行 `main.py`。
+## 模型说明
+
+使用学习时长、睡眠时长和出勤率预测学生成绩，通过 Pipeline 串联 StandardScaler 标准化与 LinearRegression 线性回归，并使用测试集和 5 折交叉验证评估模型。
+
+训练与预测分别由 `main.py` 和 `predict.py` 完成。已验证：输入学习时长 4.5 小时、睡眠时长 7 小时、出勤率 90%，训练端与加载模型后的预测端均输出 77.01。
+
+当前项目用于学习。睡眠时长和出勤率包含教学构造数据，模型结果不能作为真实教育研究结论，回归系数也不能直接解释为因果关系。
